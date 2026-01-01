@@ -1,0 +1,6 @@
+# 排除本地端的投資組合存檔
+portfolio_db.json
+
+# 排除 Python 編譯暫存檔
+__pycache__/
+*.pyc
