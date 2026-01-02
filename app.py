@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 import json
 import os
 
-# --- 1. 系統初始化 ---
+# 1.系統初始化
 st.set_page_config(page_title="台股專業全方位分析系統", layout="wide")
 api = DataLoader()
 DB_FILE = "portfolio_db.json"
@@ -27,7 +27,7 @@ def save_db():
     with open(DB_FILE, "w", encoding="utf-8") as f:
         json.dump(st.session_state.watchlists, f, ensure_ascii=False, indent=4)
 
-# --- 2. 數據獲取函式 ---
+# 2.數據獲取函式
 @st.cache_data(ttl=60)
 def get_price_data(ticker, period_label):
     """獲取行情資料"""
@@ -55,12 +55,12 @@ def get_header_metrics(ticker):
     growth = ((current_p - h_year['Close'].iloc[0]) / h_year['Close'].iloc[0] * 100) if not h_year.empty else 0
     return {"open": open_p, "current": current_p, "eps": info.get("trailingEps", 0), "dividend": info.get("lastDividendValue", 0), "growth": growth}
 
-# --- 3. 側邊欄佈局 ---
+# 3.側邊欄佈局
 with st.sidebar:
-    st.title("🛡️ 戰情控制中心")
+    st.title("控制中心")
 
     with st.expander("🔍 股票查詢", expanded=True):
-        main_search_id = st.text_input("輸入代號 (主圖顯示)", value="2330").upper()
+        main_search_id = st.text_input("請輸入股票代號", value="2330").upper()
     
     with st.expander("📁 資料夾編輯", expanded=True):
         st.write("**現有資料夾：**")
@@ -73,17 +73,15 @@ with st.sidebar:
             if st.session_state.active_folder == folder_name:
                 stocks = st.session_state.watchlists[folder_name]
                 if stocks:
-                    for s in stocks: st.write(f"&nbsp;&nbsp;&nbsp;&nbsp;📄 `{s}`")
+                    for s in stocks: st.write(f"&nbsp;&nbsp;&nbsp;&nbsp;📄`{s}`")
                 else: st.caption("&nbsp;&nbsp;&nbsp;&nbsp;(資料夾為空)")
-
-        st.write("---")
-        # --- 按鈕移至此處 (列表下方) ---
-        if st.button(f"📥 加入 {main_search_id}", use_container_width=True):
+                
+        if st.button(f"加入 {main_search_id}", use_container_width=True):
             if st.session_state.active_folder and main_search_id not in st.session_state.watchlists[st.session_state.active_folder]:
                 st.session_state.watchlists[st.session_state.active_folder].append(main_search_id)
                 save_db(); st.rerun()
         
-        if st.button(f"📤 移除 {main_search_id}", use_container_width=True):
+        if st.button(f"移除 {main_search_id}", use_container_width=True):
             if st.session_state.active_folder and main_search_id in st.session_state.watchlists[st.session_state.active_folder]:
                 st.session_state.watchlists[st.session_state.active_folder].remove(main_search_id)
                 save_db(); st.rerun()
@@ -91,23 +89,23 @@ with st.sidebar:
         st.divider()
         st.write("**管理動作：**")
         new_f = st.text_input("新資料夾名稱", placeholder="輸入名稱...", label_visibility="collapsed")
-        if st.button("✨ 建立新資料夾", use_container_width=True):
+        if st.button("✨建立新資料夾", use_container_width=True):
             if new_f: st.session_state.watchlists[new_f] = []; save_db(); st.rerun()
         
-        if st.button("🗑️ 刪除選中資料夾", use_container_width=True):
+        if st.button("🗑️刪除選中資料夾", use_container_width=True):
             if st.session_state.active_folder:
                 del st.session_state.watchlists[st.session_state.active_folder]
                 st.session_state.active_folder = None; save_db(); st.rerun()
 
-    with st.expander("📊 分析維度設定", expanded=True):
+    with st.expander("📊分析圖表類型", expanded=True):
         view_option = st.radio("左下角顯示內容：", ["三大法人買賣超", "歷年趨勢對比", "同業指標對比"])
 
-# --- 4. 主畫面佈局 ---
+# 4.主畫面
 left_main, right_info = st.columns([2, 1])
 
 with left_main:
-    # [左上：行情圖區]
-    st.subheader(f"📈 {main_search_id} 行情走勢")
+    # 左上
+    st.subheader(f"📈{main_search_id} 行情走勢")
     t_col1, t_col2 = st.columns([1, 2])
     chart_type = t_col1.selectbox("類別", ["K線圖", "折線圖"])
     time_scale = t_col2.select_slider("時間尺度", options=["今日", "5日","1月", "3月", "半年", "1年", "5年"])
@@ -120,13 +118,13 @@ with left_main:
         else:
             fig.add_trace(go.Candlestick(x=hist.index, open=hist['Open'], high=hist['High'], low=hist['Low'], close=hist['Close']))
         fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
-        fig.update_layout(height=400, xaxis_rangeslider_visible=False, template="plotly_white", margin=dict(t=0, b=0))
+        fig.update_layout(height=375, xaxis_rangeslider_visible=False, template="plotly_white", margin=dict(t=0, b=0))
         st.plotly_chart(fig, use_container_width=True)
 
     st.divider()
 
-    # [左下：動態呈現區]
-    st.subheader(f"🧐 深度分析：{view_option}")
+    # 左下
+    st.subheader(f"深度分析：{view_option}")
     
     if view_option == "三大法人買賣超":
         df_chip = api.taiwan_stock_institutional_investors(stock_id=main_search_id, start_date=(datetime.now()-timedelta(days=30)).strftime('%Y-%m-%d'))
@@ -134,15 +132,15 @@ with left_main:
             st.plotly_chart(px.bar(df_chip, x='date', y='buy', color='name', barmode='group', template="plotly_white"), use_container_width=True)
             
     elif view_option == "歷年趨勢對比":
-        # 歷年指標選擇 (位於圖表上方)
-        sel = st.multiselect("選擇歷年指標", ["Revenue", "CostOfGoodsSold", "GrossProfit", "EPS"], default=["EPS"])
+        # 歷年指標選擇
+        sel = st.multiselect("選擇歷年指標", ["Revenue", "CostOfGoodsSold", "GrossProfit", "EPS", "OtherComprehensiveIncome"], default=["EPS"])
         df_f = api.taiwan_stock_financial_statement(stock_id=main_search_id, start_date='2021-01-01')
         if not df_f.empty and sel:
             df_plt = df_f[df_f['type'].isin(sel)]
             st.plotly_chart(px.line(df_plt, x='date', y='value', color='type', markers=True, template="plotly_white"), use_container_width=True)
             
     elif view_option == "同業指標對比":
-        # 同業指標選擇 (位於圖表上方)
+        # 同業指標選擇
         compare_metrics = st.multiselect("選擇對比指標", ["EPS", "本益比(PER)", "股價淨值比(PBR)", "股利率"], default=["EPS"])
         target_folder = st.session_state.active_folder
         
@@ -171,8 +169,8 @@ with left_main:
             st.info("請點選左側資料夾並選擇指標。")
 
 with right_info:
-    # [右上：數據卡片]
-    st.subheader("💎 核心指標數據")
+    # 右上
+    st.subheader("數據概要")
     try:
         m = get_header_metrics(main_search_id)
         r1, r2 = st.columns(2)
@@ -183,9 +181,9 @@ with right_info:
     except: st.error("數據更新中...")
 
     st.divider()
-    # [右下：詳細財報表格]
-    st.subheader("📋 歷史財務報表")
+    # 右下
+    st.subheader("歷史財務報表")
     df_raw = api.taiwan_stock_financial_statement(stock_id=main_search_id, start_date='2022-01-01')
     if not df_raw.empty:
         df_p = df_raw.pivot(index='type', columns='date', values='value').sort_index(axis=1, ascending=False)
-        st.dataframe(df_p, height=550, use_container_width=True)
+        st.dataframe(df_p, height=625, use_container_width=True)
