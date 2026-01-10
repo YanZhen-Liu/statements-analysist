@@ -62,15 +62,23 @@ YF_RATIOS = {
 }
 PERCENTAGE_FIELDS = ["profitMargins", "grossMargins", "operatingMargins", "returnOnAssets", "returnOnEquity", "dividendYield", "payoutRatio"]
 
+# 資料庫讀取
 if 'db' not in st.session_state:
     if os.path.exists(DB_FILE):
-        with open(DB_FILE, "r", encoding="utf-8") as f:
-            st.session_state.db = json.load(f)
+        try:
+            with open(DB_FILE, "r", encoding="utf-8") as f:
+                temp_db = json.load(f)
+                if "watchlists" not in temp_db:
+                    temp_db = {"watchlists": temp_db, "custom_ratios": {}}
+                if "custom_ratios" not in temp_db:
+                    temp_db["custom_ratios"] = {}
+                st.session_state.db = temp_db
+        except:
+            st.session_state.db = {"watchlists": {"權值股": ["2330", "TSLA"]}, "custom_ratios": {}}
     else:
         st.session_state.db = {"watchlists": {"權值股": ["2330", "TSLA"]}, "custom_ratios": {}}
 
 if 'active_folder' not in st.session_state: st.session_state.active_folder = None
-# 初始化公式緩衝區
 if 'formula_buffer' not in st.session_state: st.session_state.formula_buffer = ""
 
 def save_db():
@@ -87,8 +95,6 @@ def get_price_data(ticker, period_label, market):
     
     try:
         df = yf.download(symbol, period=p_map.get(period_label, "1d"), interval=i_map.get(period_label, "1d"), progress=False, auto_adjust=True)
-        
-        # 備援
         if (df.empty or len(df) < 2) and period_label == "今日":
             df = yf.download(symbol, period="5d", interval="5m", progress=False, auto_adjust=True)
 
@@ -141,13 +147,15 @@ def get_financial_data(ticker, market):
 def calculate_custom_formula(formula_str, pivot_df):
     try:
         if pivot_df.empty: return pd.Series(dtype=float)
-        eval_str = formula_str
+        # [修正] 移除多餘空格並精確匹配
+        eval_str = formula_str.strip()
         available_cols = sorted(pivot_df.columns, key=len, reverse=True)
         for col in available_cols:
             if col in eval_str:
                 eval_str = eval_str.replace(col, f"pivot_df['{col}']")
+        # [修正] 傳入 pivot_df 實體
         return eval(eval_str, {"__builtins__": None}, {"pivot_df": pivot_df})
-    except Exception as e:
+    except:
         return pd.Series(0, index=pivot_df.index)
 
 # --- 3. 介面佈局 ---
@@ -158,8 +166,8 @@ with st.sidebar:
         main_id = st.text_input("輸入代號", value="2330").upper()
 
     with st.expander("📁 資料夾編輯", expanded=True):
+        # 顯示資料夾列表
         for fn in list(st.session_state.db["watchlists"].keys()):
-            # 若選中則標示為 📂，否則 📁
             icon = "📂" if st.session_state.active_folder == fn else "📁"
             if st.button(f"{icon} {fn}", key=f"f_{fn}"):
                 st.session_state.active_folder = fn; st.rerun()
@@ -167,25 +175,34 @@ with st.sidebar:
                 for s in st.session_state.db["watchlists"][fn]: st.write(f"&nbsp;&nbsp;&nbsp;&nbsp;📄 `{s}`")
         
         st.divider()
-        
-        # [修改點] 移除 st.columns(2)，改為垂直排列
-        # 加入按鈕
+        st.write("**股票管理**")
         if st.button(f"加入 {main_id}", use_container_width=True):
             if st.session_state.active_folder:
                 if main_id not in st.session_state.db["watchlists"][st.session_state.active_folder]:
                     st.session_state.db["watchlists"][st.session_state.active_folder].append(main_id)
                     save_db(); st.rerun()
-            else:
-                st.warning("請先選擇一個資料夾")
+            else: st.warning("請先選擇一個資料夾")
 
-        # 移除按鈕
         if st.button(f"移除 {main_id}", use_container_width=True):
             if st.session_state.active_folder:
                 if main_id in st.session_state.db["watchlists"][st.session_state.active_folder]:
                     st.session_state.db["watchlists"][st.session_state.active_folder].remove(main_id)
                     save_db(); st.rerun()
-            else:
-                st.warning("請先選擇一個資料夾")
+            else: st.warning("請先選擇一個資料夾")
+            
+        st.divider()
+        st.write("**資料夾管理**")
+        new_folder_name = st.text_input("新資料夾名稱", placeholder="輸入名稱...", label_visibility="collapsed")
+        if st.button("✨ 建立新資料夾", use_container_width=True):
+            if new_folder_name and new_folder_name not in st.session_state.db["watchlists"]:
+                st.session_state.db["watchlists"][new_folder_name] = []
+                save_db(); st.rerun()
+        
+        if st.button("🗑️ 刪除選中資料夾", use_container_width=True):
+            if st.session_state.active_folder:
+                del st.session_state.db["watchlists"][st.session_state.active_folder]
+                st.session_state.active_folder = None # [修正] 刪除後重置選取狀態
+                save_db(); st.rerun()
 
     # 互動式公式計算機
     with st.expander("自定義財務公式", expanded=False):
@@ -207,7 +224,8 @@ with st.sidebar:
         if c5.button("(", key="btn_p1"): st.session_state.formula_buffer += "( "; st.rerun()
         if c6.button(")", key="btn_p2"): st.session_state.formula_buffer += ") "; st.rerun()
         if c7.button("←", key="btn_back"): 
-            st.session_state.formula_buffer = st.session_state.formula_buffer[:-1]
+            # [修正] 退格邏輯優化
+            st.session_state.formula_buffer = st.session_state.formula_buffer.strip().rsplit(' ', 1)[0] + ' ' if ' ' in st.session_state.formula_buffer.strip() else ""
             st.rerun()
         if c8.button("C", key="btn_clr"): 
             st.session_state.formula_buffer = ""
@@ -219,7 +237,6 @@ with st.sidebar:
             if new_name and st.session_state.formula_buffer:
                 st.session_state.db["custom_ratios"][new_name] = st.session_state.formula_buffer.strip()
                 save_db()
-                st.success(f"已儲存: {new_name}")
                 st.session_state.formula_buffer = "" 
                 st.rerun()
                 
@@ -276,8 +293,7 @@ with l_col:
         df_f = get_financial_data(main_id, market_type)
         if not df_f.empty and sel_t:
             fig_t = go.Figure()
-            piv = df_f.pivot_table(index='date', columns='type', values='value')
-            piv = piv.sort_index()
+            piv = df_f.pivot_table(index='date', columns='type', values='value').sort_index()
             
             for m in sel_t:
                 if m in st.session_state.db["custom_ratios"]:
@@ -302,11 +318,7 @@ with l_col:
                 s_info = yf.Ticker(f"{sid}.TW" if m_t=="台股" else sid).info
                 row = {"代號": sid}
                 
-                if not df_p.empty:
-                    p_piv = df_p.pivot_table(index='date', columns='type', values='value')
-                    p_piv = p_piv.sort_index()
-                else:
-                    p_piv = pd.DataFrame()
+                p_piv = df_p.pivot_table(index='date', columns='type', values='value').sort_index() if not df_p.empty else pd.DataFrame()
 
                 for m in sel_c:
                     val = 0
@@ -356,9 +368,7 @@ with r_col:
             curr_p = h_1y['Close'].iloc[-1]
             yoy = ((curr_p - h_1y['Close'].iloc[0]) / h_1y['Close'].iloc[0]) * 100
         else:
-            open_p = info.get('open', 0)
-            curr_p = info.get('currentPrice', 0)
-            yoy = 0
+            open_p = info.get('open', 0); curr_p = info.get('currentPrice', 0); yoy = 0
             
         m1, m2 = st.columns(2)
         m1.metric("開盤價", f"${open_p:,.2f}")
