@@ -47,7 +47,7 @@
 請建立一個 `requirements.txt` 或直接執行以下指令：
 
 ```bash
-pip install streamlit yfinance pandas plotly finmind tqdm
+pip install streamlit yfinance pandas plotly finmind tqdm openai
 
 ```
 
